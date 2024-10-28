@@ -1,0 +1,111 @@
+﻿@model UserCreateViewModel
+@{
+    ViewData["Title"] = "Kullanıcı Oluştur";
+}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    .card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+    }
+
+    .card-title {
+        color: #1a237e;
+    }
+
+    .form-control:focus {
+        border-color: #1a237e;
+        box-shadow: 0 0 0 0.2rem rgba(26, 35, 126, 0.25);
+    }
+
+    .btn-primary {
+        background-color: #1a237e;
+        border-color: #1a237e;
+    }
+
+        .btn-primary:hover {
+            background-color: #0e1859;
+            border-color: #0e1859;
+        }
+</style>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Yeni Kullanıcı Oluştur</h2>
+                <form asp-action="CreateUser" asp-controller="Admin" method="post">
+                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+                     <div class="form-group">
+                        <label asp-for="ApiUrl">Api Base URL</label>
+                        <input asp-for="ApiUrl" class="form-control" />
+                        <span asp-validation-for="ApiUrl" class="text-danger"></span>
+                    </div>
+                    <div class="form-group">
+                        <label asp-for="Username"></label>
+                        <input asp-for="Username" class="form-control" />
+                        <span asp-validation-for="Username" class="text-danger"></span>
+                    </div>
+                    <div class="form-group">
+                        <label asp-for="Password"></label>
+                        <input asp-for="Password" class="form-control" />
+                        <span asp-validation-for="Password" class="text-danger"></span>
+                    </div>
+                    <div class="form-group">
+                        <label asp-for="ApiKey"></label>
+                        <input asp-for="ApiKey" class="form-control" />
+                        <span asp-validation-for="ApiKey" class="text-danger"></span>
+                    </div>
+                    <div class="form-group">
+                        <label asp-for="FirmaKodu"></label>
+                        <input asp-for="FirmaKodu" class="form-control" />
+                        <span asp-validation-for="FirmaKodu" class="text-danger"></span>
+                    </div>
+                    <div class="form-group">
+                        <label asp-for="DonemKodu"></label>
+                        <input asp-for="DonemKodu" class="form-control" />
+                        <span asp-validation-for="DonemKodu" class="text-danger"></span>
+                    </div>
+                    
+                   
+                    <div class="form-group">
+                        <label asp-for="SubeKodu">Şube Kodu</label>
+                        <input asp-for="SubeKodu" class="form-control" />
+                        <span asp-validation-for="SubeKodu" class="text-danger"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label asp-for="UstIslemTuru">Üst İşlem Türü(Firmada Aktif İse)</label>
+                        <input asp-for="UstIslemTuru" class="form-control" />
+                        <span asp-validation-for="UstIslemTuru" class="text-danger"></span>
+                    </div>
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary btn-block">Kullanıcı Oluştur</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+    
+    <script>
+        $(document).ready(function () {
+        @if (TempData["SweetAlert"] != null)
+        {
+            var alertJson = TempData["SweetAlert"].ToString();
+            <text>
+                                var alertData = JSON.parse('@Html.Raw(alertJson)');
+                Swal.fire({
+                    icon: alertData.icon,
+                    title: alertData.title,
+                    text: alertData.text
+                });
+            </text>
+        }
+                });
+    </script>
+    

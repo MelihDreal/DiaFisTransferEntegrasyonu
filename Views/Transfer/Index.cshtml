@@ -1,5 +1,505 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
+﻿@model DiaFisTransferEntegrasyonu.Models.TransferViewModel
 @{
+    ViewData["Title"] = "Dia Fiş Aktarım";
 }
+
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+<style>
+    .button-container .btn {
+        height: 60px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .form-header {
+        border-radius: 0.25rem 0.25rem 0rem 0rem;
+        color: white;
+        padding: 15px;
+        padding-top: 20px;
+        text-align: center;
+    }
+
+    .form-section {
+        margin: 20px 0;
+    }
+
+    .form-button {
+        color: white;
+    }
+
+    .container {
+        width: 70%;
+        min-width: 600px;
+    }
+    /* Yeni eklenen stiller */
+    .currency-rates {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background-color: #acacfd;
+        color: #fdfdfd;
+        padding: 10px;
+        border-radius: 5px;
+        font-weight: bold;
+    }
+
+        .currency-rates span {
+            margin-right: 10px;
+        }
+</style>
+
+<!-- Döviz kurları için yeni div -->
+<div class="currency-rates">
+    <span>€: <span id="eur-rate">0.00</span></span>
+    <span>$: <span id="usd-rate">0.00</span></span>
+    <span>£: <span id="gbp-rate">0.00</span></span>
+</div>
+
+<div>
+    <!-- Güncelleme Butonu -->
+    <button id="updateButton" class="btn btn-primary update-button">Bilgileri Güncelle</button>
+
+    <!-- Form Seçim Butonları -->
+    <div class="container button-container">
+        <div class="row d-flex align-items-stretch">
+            <div class="col text-center">
+                <button class="btn btn-success" onclick="toggleForm('form1')">TAHSİLAT FİŞİ (KASA)</button>
+            </div>
+            <div class="col text-center">
+                <button class="btn btn-primary" onclick="toggleForm('form2')">KREDİ KARTI TAHSİLAT</button>
+            </div>
+            <div class="col text-center">
+                <button class="btn btn-secondary" onclick="toggleForm('form3')" style="background-color: darkorange; border: none;">CARİ VİRMAN FİŞİ</button>
+            </div>
+            <div class="col text-center">
+                <button class="btn btn-danger" onclick="toggleForm('form4')">GELEN HAVALE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form1: NAKİT TAHSİLAT FİŞİ (AJAX ile Gönderilecek) -->
+    <form id="form1" class="container mt-5 shadow" method="post" asp-action="NakitTahsilatFisKayit" style="border-radius: 0.25rem; padding: 0px; display: block;">
+        <div class="form-header" style="background-color: #28a745;">
+            <h3>NAKİT TAHSİLAT FİŞİ</h3>
+        </div>
+
+        <div class="form-section" style="padding: 20px; margin: 0;">
+            <div class="form-row">
+                <div class="form-group col">
+                    <label for="cashBox1">Kasa Seçiniz</label>
+                    <select name="kasaId" class="form-control selectpicker" data-style="btn-primary" id="cashBox1">
+                        <option value="" disabled selected>Kasa Seçiniz</option>
+                        @foreach (var kasa in Model.KasaKartlari)
+                        {
+                            <option name="kasaId" value="@kasa.KasaId" data-kasaid="@kasa.KasaId">@kasa.KasaAdi</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group col">
+                    <label for="date1">Tarih</label>
+                    <input type="date" name="tarih" class="form-control" id="date1">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="cariAdi1">Cari</label>
+                <input type="text" class="form-control cari-input" placeholder="Cari Seçiniz (Liste)" id="cariAdi1" name="cariAdi" autocomplete="off" required>
+                <input type="hidden" id="cariId1" name="cariId">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="amount1">Tutar</label>
+                    <input type="number" class="form-control" name ="tutar" id="amount1" placeholder="Tutar Giriniz">
+                </div>
+                <div class="form-group col-2">
+                    <label for="currency1">Döviz</label>
+                    <select name="doviz" class="form-control selectpicker" data-style="btn-primary" id="currency1">
+                        <option value="" disabled selected>Döviz</option>
+                        <option value="TL" selected>₺</option>
+                        <option value="USD">&#36;</option>
+                        <option value="EUR">&#8364;</option>
+                        <option value="GBP">&#163;</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="description1">Fiş Açıklaması</label>
+                <input type="text" name="aciklama" class="form-control" id="description1" placeholder="Fiş Açıklaması">
+            </div>
+        </div>
+        <div style="padding: 20px; padding-top: 0px; margin: 0px;">
+            <button type="submit" class="btn form-button btn-block" id="saveButton1" style="border-radius: 0.25rem; background-color: #28a745;">KAYDET</button>
+        </div>
+    </form>
+
+    <!-- Form2: KREDİ KARTI TAHSİLAT (Standart Form Submit) -->
+    <form id="form2" class="container mt-5 shadow" method="post" asp-action="KartTahsilatFisKayit" style="border-radius: 0.25rem; padding: 0px; display: none;">
+        <div class="form-header" style="background-color: #007bff;">
+            <h3>KREDİ KARTI TAHSİLAT FİŞİ</h3>
+        </div>
+
+        <div class="form-section" style="padding: 20px; margin: 0;">
+            <!-- Ödeme Planı Seçimi -->
+            <div class="form-row">
+                <div class="form-group col">
+                    <label for="paymentPlan2">Ödeme Planı Seçiniz</label>
+                    <select class="form-control selectpicker" data-style="btn-primary" id="paymentPlan2" name="PlanId" required>
+                        <option value="" disabled selected>Ödeme Planı Seçiniz</option>
+                        @if (Model?.OdemePlanlari != null)
+                        {
+                            foreach (var plan in Model.OdemePlanlari)
+                            {
+                                <option value="@plan.PlanId" data-planhesapkey="@plan.PlanHesapKey">@plan.PlanAdi</option>
+                            }
+                        }
+                    </select>
+                    <!-- Gizli Alanlar -->
+                    <input type="hidden" id="PlanHesapKey2" name="PlanHesapKey" />
+                </div>
+                <div class="form-group col">
+                    <label for="date2">Tarih</label>
+                    <input type="date" class="form-control" id="date2" name="Tarih" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="cariAdi2">Cari</label>
+                <input type="text" class="form-control cari-input" placeholder="Cari Seçiniz (Liste)" id="cariAdi2" name="cariAdi" autocomplete="off" required>
+                <input type="hidden" id="cariId2" name="cariId">
+            </div>
+
+            <!-- Tutar ve Döviz -->
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="amount2">Tutar</label>
+                    <input type="number" class="form-control" id="amount2" name="Tutar" placeholder="Tutar Giriniz" step="0.01" required>
+                </div>
+                <div class="form-group col-2">
+                    <label for="currency2">Döviz</label>
+                    <select class="form-control selectpicker" data-style="btn-primary" id="currency2" name="Doviz" required>
+                        <option value="TL" selected>₺</option>
+                        <option value="USD">&#36;</option>
+                        <option value="EUR">&#8364;</option>
+                        <option value="GBP">&#163;</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Açıklama -->
+            <div class="form-group">
+                <label for="description2">Fiş Açıklaması</label>
+                <input type="text" class="form-control" id="description2" name="Aciklama" placeholder="Fiş Açıklaması" required>
+            </div>
+        </div>
+        <div style="padding: 20px; padding-top: 0px; margin: 0px;">
+            <button type="submit" class="btn form-button btn-block" id="saveButton2" style="border-radius: 0.25rem; background-color: #007bff;">KAYDET</button>
+        </div>
+    </form>
+
+    <!-- Form3: CARİ VİRMAN FİŞİ (Standart Form Submit) -->
+    <form id="form3" class="container mt-5 shadow" method="post" action="/Transfer/VirmanFisKayit" style="border-radius: 0.25rem; padding: 0px; display: none;">
+        <div class="form-header" style="background-color: darkorange;">
+            <h3>CARİ VİRMAN FİŞİ</h3>
+        </div>
+
+        <div class="form-section" style="padding: 20px; margin: 0;">
+            <div class="form-row" style="align-items: end; justify-content: end;">
+                <div class="form-group col-6">
+                    <label for="date3">Tarih</label>
+                    <input type="date" class="form-control" id="date3" name="tarih" required>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group col">
+                    <label for="alacakCariAdi3">Ödemeyi Yapan Firma</label>
+                    <input type="text" class="form-control cari-input" placeholder="Alacak Cari Seçiniz (Liste)" id="alacakCariAdi3" name="alacakCariAdi" autocomplete="off" required>
+                    <input type="hidden" id="alacakCariId3" name="alacakCariId">
+                </div>
+                <div class="form-group col-4">
+                    <label for="alacakTutar3">Alacak Tutar</label>
+                    <input type="number" class="form-control" id="alacakTutar3" name="alacakTutar" placeholder="Alacak Tutar" step="0.01" required>
+                </div>
+                <div class="form-group col-2">
+                    <label for="alacakDoviz3">Alacak Döviz</label>
+                    <select class="form-control selectpicker" data-style="btn-primary" id="alacakDoviz3" name="alacakDoviz" required>
+                        <option value="TL" selected>₺</option>
+                        <option value="USD">&#36;</option>
+                        <option value="EUR">&#8364;</option>
+                        <option value="GBP">&#163;</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group col">
+                    <label for="borcCariAdi3">POS Çekimi Yapılan Firma</label>
+                    <input type="text" class="form-control cari-input" placeholder="Borç Cari Seçiniz (Liste)" id="borcCariAdi3" name="borcCariAdi" autocomplete="off" required>
+                    <input type="hidden" id="borcCariId3" name="borcCariId">
+                </div>
+                <div class="form-group col-4">
+                    <label for="borcTutar3">Borç Tutar</label>
+                    <input type="number" class="form-control" id="borcTutar3" name="borcTutar" placeholder="Borç Tutar" step="0.01" readonly>
+                </div>
+                <div class="form-group col-2">
+                    <label for="borcDoviz3">Borç Döviz</label>
+                    <select class="form-control selectpicker" data-style="btn-primary" id="borcDoviz3" name="borcDoviz" disabled>
+                        <option value="TL" selected>₺</option>
+                        <option value="USD">&#36;</option>
+                        <option value="EUR">&#8364;</option>
+                        <option value="GBP">&#163;</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="aciklama3">Fiş Açıklaması</label>
+                <input type="text" class="form-control" id="aciklama3" name="aciklama" placeholder="Fiş Açıklaması" required>
+            </div>
+        </div>
+        <div style="padding: 20px; padding-top: 0px; margin: 0px;">
+            <button type="submit" class="btn form-button btn-block" id="saveButton3" style="border-radius: 0.25rem; background-color: darkorange;">KAYDET</button>
+        </div>
+    </form>
+
+    <!-- Form4: GELEN HAVALE (Standart Form Submit) -->
+    <form id="form4" class="container mt-5 shadow" method="post" action="/Transfer/GelenHavaleKayit" style="border-radius: 0.25rem; padding: 0px; display: none;">
+        <div class="form-header" style="background-color: #dc3545;">
+            <h3>GELEN HAVALE FİŞİ</h3>
+        </div>
+
+        <div class="form-section" style="padding: 20px; margin: 0;">
+            <div class="form-row">
+                <div class="form-group col">
+                    <label for="bankaHesapAdi4">Banka Hesabı</label>
+                    <select class="form-control selectpicker" data-style="btn-primary" id="bankaHesapAdi4" name="bankaHesapAdi" required>
+                        <option value="" disabled selected>Banka Hesabı Seçiniz</option>
+                        @if (Model?.BankaHesaplari != null)
+                        {
+                            foreach (var hesap in Model.BankaHesaplari)
+                            {
+                                <option value="@hesap.HesapId">@hesap.HesapAdi</option>
+                            }
+                        }
+                    </select>
+                    <input type="hidden" id="bankaHesapId4" name="bankaHesapId">
+                </div>
+                <div class="form-group col-md-3">
+                    <label for="tarih4">Tarih</label>
+                    <input type="date" class="form-control" id="tarih4" name="tarih" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="cariAdi4">Cari</label>
+                <input type="text" class="form-control cari-input" placeholder="Cari Seçiniz (Liste)" id="cariAdi4" name="cariAdi" autocomplete="off" required>
+                <input type="hidden" id="cariId4" name="cariId">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group col-6">
+                    <label for="tutar4">Tutar</label>
+                    <input type="number" class="form-control" id="tutar4" name="tutar" placeholder="Tutar Giriniz" step="0.01" required>
+                </div>
+                <div class="form-group col-2">
+                    <label for="doviz4">Döviz</label>
+                    <select class="form-control selectpicker" data-style="btn-primary" id="doviz4" name="doviz" required>
+                        <option value="TL" selected>₺</option>
+                        <option value="USD">&#36;</option>
+                        <option value="EUR">&#8364;</option>
+                        <option value="GBP">&#163;</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="aciklama4">Fiş Açıklaması</label>
+                <input type="text" class="form-control" id="aciklama4" name="aciklama" placeholder="Fiş Açıklaması">
+            </div>
+        </div>
+        <div style="padding: 20px; padding-top: 0px; margin: 0px;">
+            <button type="submit" class="btn form-button btn-block" id="saveButton4" style="border-radius: 0.25rem; background-color: #dc3545;">KAYDET</button>
+        </div>
+    </form>
+
+</div>
+
+<!-- jQuery ve Diğer Scriptler -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+<!-- SweetAlert için Script -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    $(document).ready(function () {
+        // Formları Göster/Gizle Fonksiyonu
+        function toggleForm(formId) {
+            $('[id^="form"]').hide();
+            $('#' + formId).show();
+        }
+
+        // Form Seçim Butonlarına Tıklandığında Formları Değiştir
+        $('.button-container .btn').click(function () {
+            const formId = $(this).attr('onclick').match(/'([^']+)'/)[1];
+            toggleForm(formId);
+        });
+
+        // Güncelleme Butonu (AJAX ile Bilgileri Güncelle)
+        $('#updateButton').click(function () {
+            fetch('/Transfer/UpdateInfo', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+                .then(response => response.json())
+                .then(data => {
+                    Swal.fire({
+                        title: data.success ? 'Başarılı!' : 'Hata!',
+                        text: data.success ? 'Bilgiler başarıyla güncellendi.' : 'Bilgiler güncellenirken bir hata oluştu.',
+                        icon: data.success ? 'success' : 'error',
+                        confirmButtonText: 'Tamam'
+                    });
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire({
+                        title: 'Hata!',
+                        text: 'Bir hata oluştu. Lütfen tekrar deneyin.',
+                        icon: 'error',
+                        confirmButtonText: 'Tamam'
+                    });
+                });
+        });
+
+        // Autocomplete Ayarlama Fonksiyonu
+        function setupAutocomplete(cariAdiSelector, cariIdSelector) {
+            $(cariAdiSelector).autocomplete({
+                source: function (request, response) {
+                    $.ajax({
+                        url: '@Url.Action("SearchCariler", "Transfer")',
+                        dataType: "json",
+                        data: { term: request.term },
+                        success: function (data) { response(data); },
+                        error: function (xhr, status, error) { console.error(xhr.responseText); }
+                    });
+                },
+                minLength: 2,
+                select: function (event, ui) {
+                    $(cariAdiSelector).val(ui.item.label);
+                    $(cariIdSelector).val(ui.item.id);
+                    console.log(`${cariIdSelector} set edildi: ${ui.item.id}`); // Log
+                    return false;
+                }
+            });
+        }
+
+        // Tüm Cari Adı Alanları İçin Autocomplete Ayarlama
+        setupAutocomplete('#cariAdi1', '#cariId1');
+        setupAutocomplete('#cariAdi2', '#cariId2');
+        setupAutocomplete('#alacakCariAdi3', '#alacakCariId3');
+        setupAutocomplete('#borcCariAdi3', '#borcCariId3');
+        setupAutocomplete('#cariAdi4', '#cariId4');
+
+        // Bugünün Tarihini Tüm Tarih Alanlarına Atama
+        var today = new Date().toISOString().split('T')[0];
+        $('input[type="date"]').each(function () {
+            $(this).val(today);
+        });
+
+        // Form2: Ödeme Planı Değiştiğinde PlanHesapKey'i Güncelle
+        $('#paymentPlan2').change(function () {
+            $('#PlanHesapKey2').val($(this).find('option:selected').data('planhesapkey'));
+        });
+
+       
+        // SweetAlert Mesajları (Sunucudan Gelen Mesajlar)
+        var encodedMessage = '@Html.Raw(TempData["SweetAlertMessage"])';
+        var type = '@TempData["SweetAlertType"]';
+
+        if (encodedMessage) {
+            var message = JSON.parse(encodedMessage);
+            Swal.fire({
+                title: type === 'success' ? 'Başarılı!' : 'Hata!',
+                text: message,
+                icon: type,
+                confirmButtonText: 'Tamam'
+            });
+        }
+
+        // Form4: Banka Hesabı Seçimi ve Banka Hesap ID Güncelleme
+        $('#bankaHesapAdi4').change(function () {
+            var selectedHesapId = $(this).val();
+            $('#bankaHesapId4').val(selectedHesapId);
+            console.log("Banka Hesap ID güncellendi: " + selectedHesapId); // Log
+        });
+
+        // Form3: Alacak Tutarını Borç Tutarına Senkronize Etme
+        $('#alacakTutar3').on('input', function () {
+            $('#borcTutar3').val($(this).val());
+        });
+
+        // Alacak Döviz seçimi değiştiğinde Borç Döviz'i güncelle
+        $('#alacakDoviz3').change(function () {
+            $('#borcDoviz3').val($(this).val()).selectpicker('refresh');
+        });
+
+        // Enter Tuşunu Tab Tuşu Gibi Çalıştırma Fonksiyonu
+        function setupEnterAsTab(formId) {
+            $('#' + formId + ' input, #' + formId + ' select, #' + formId + ' textarea').on('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault(); // Formun submit edilmesini engeller
+
+                    // Tüm odaklanabilir elementleri seçer
+                    var focusableElements = $('#' + formId).find('input, select, textarea, button').filter(':visible');
+
+                    // Şu anki elementin indeksini bulur
+                    var currentIndex = focusableElements.index(this);
+
+                    // Bir sonraki odaklanabilir elemana odaklanır
+                    if (currentIndex > -1 && currentIndex < focusableElements.length - 1) {
+                        focusableElements.eq(currentIndex + 1).focus();
+                    }
+                }
+            });
+        }
+
+        // Tüm Formlar İçin Enter'u Tab Gibi Çalıştırma
+        setupEnterAsTab('form1');
+        setupEnterAsTab('form2');
+        setupEnterAsTab('form3');
+        setupEnterAsTab('form4');
+
+    });
+
+    function updateDovizKurlari() {
+        $.ajax({
+            url: '@Url.Action("GetDovizKurlari", "Transfer")',
+            type: 'GET',
+            success: function (result) {
+                var kurlar = {
+                    'EUR': '€',
+                    'USD': '$',
+                    'GBP': '£'
+                };
+
+                result.forEach(function (kur) {
+                    if (kur.dovizKodu in kurlar) {
+                        $(`#${kur.dovizKodu.toLowerCase()}-rate`).text(kur.kur.toFixed(2));
+                    }
+                });
+            }
+        });
+    }
+
+    // Sayfa yüklendiğinde döviz kurlarını güncelle
+    $(document).ready(function () {
+        updateDovizKurlari();
+    });
+
+    // Her 5 dakikada bir döviz kurlarını güncelle
+    setInterval(updateDovizKurlari, 5 * 60 * 1000);
+</script>
