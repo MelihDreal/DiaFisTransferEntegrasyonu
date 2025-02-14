@@ -14,7 +14,7 @@ namespace DiaFisTransferEntegrasyonu.Controllers
         public AdminController(ApplicationDbContext context)
         {
             _context = context;
-        }
+        } 
 
         public IActionResult Index()
         {
