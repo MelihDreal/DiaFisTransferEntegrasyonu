@@ -618,7 +618,7 @@ namespace DiaFisTransferEntegrasyonu.Services
                         filters = "",
                         sorts = new[] { new { field = "carikartkodu", sorttype = "DESC" } },
                         @params = new { irsaliyeleriDahilEt = "False" },
-                        limit = 100,
+                        limit = 0,
                         offset = 0
                     }
                 };
@@ -694,12 +694,11 @@ namespace DiaFisTransferEntegrasyonu.Services
             string sessionId = null;
             try
             {
-                // Kullanıcıyı ilgili koleksiyonlarla birlikte yükleyin
+                // Kullanıcıyı sadece gerekli koleksiyonlarla yükleyin
                 var user = await _context.Users
                     .Include(u => u.KasaKartlari)
                     .Include(u => u.OdemePlanlari)
                     .Include(u => u.BankaHesaplari)
-                    .Include(u => u.Cariler)
                     .FirstOrDefaultAsync(u => u.Id == userId);
 
                 if (user == null)
@@ -713,60 +712,68 @@ namespace DiaFisTransferEntegrasyonu.Services
                     throw new Exception("Login işlemi başarısız oldu.");
                 }
 
+                // Verileri DIA'dan çek
                 var kasaKartlari = ParseKasaKartlari(await GetKasaKartlariAsync(sessionId));
                 var odemePlanlari = ParseOdemePlanlari(await GetOdemePlanlariAsync(sessionId));
                 var bankaHesaplari = ParseBankaHesaplari(await GetBankaHesaplariAsync(sessionId));
                 var cariKartlar = ParseCariKartlar(await GetCariKartlarAsync(sessionId));
 
-                // Mevcut verileri silin
-                _context.KasaKartlari.RemoveRange(user.KasaKartlari);
-                _context.OdemePlanlari.RemoveRange(user.OdemePlanlari);
-                _context.BankaHesaplari.RemoveRange(user.BankaHesaplari);
-                _context.Cariler.RemoveRange(user.Cariler);
-
-                // Yeni verileri ekleyin
-                user.KasaKartlari = kasaKartlari.Select(k => new KasaKarti
+                // Transaction başlat
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    KasaId = k.KasaId,
-                    KasaAdi = k.KasaAdi,
-                    UserId = userId
-                }).ToList();
+                    // Direkt SQL ile carileri sil
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "DELETE FROM Cariler WHERE UserId = {0}", userId);
 
-                user.OdemePlanlari = odemePlanlari.Select(o => new OdemePlani
+                    // Diğer tabloları normal yolla temizle
+                    _context.KasaKartlari.RemoveRange(user.KasaKartlari);
+                    _context.OdemePlanlari.RemoveRange(user.OdemePlanlari);
+                    _context.BankaHesaplari.RemoveRange(user.BankaHesaplari);
+
+                    // Yeni kayıtları ekle
+                    user.KasaKartlari = kasaKartlari.Select(k => new KasaKarti
+                    {
+                        KasaId = k.KasaId,
+                        KasaAdi = k.KasaAdi,
+                        UserId = userId
+                    }).ToList();
+
+                    user.OdemePlanlari = odemePlanlari.Select(o => new OdemePlani
+                    {
+                        PlanId = o.PlanId,
+                        PlanAdi = o.PlanAdi,
+                        PlanHesapKey = o.PlanHesapKey,
+                        UserId = userId
+                    }).ToList();
+
+                    user.BankaHesaplari = bankaHesaplari.Select(b => new BankaHesabi
+                    {
+                        HesapId = b.HesapId,
+                        HesapAdi = b.HesapAdi,
+                        UserId = userId
+                    }).ToList();
+
+                    // Carileri bulk insert ile ekle
+                    var yeniCariler = cariKartlar.Select(c => new Cari
+                    {
+                        CariId = c.CariId,
+                        CariAdi = c.CariAdi,
+                        UserId = userId
+                    }).ToList();
+
+                    await _context.Cariler.AddRangeAsync(yeniCariler);
+
+                    user.SonGuncellenmeTarihi = DateTime.UtcNow;
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
                 {
-                    PlanId = o.PlanId,
-                    PlanAdi = o.PlanAdi,
-                    PlanHesapKey = o.PlanHesapKey,
-                    UserId = userId
-                }).ToList();
-
-                user.BankaHesaplari = bankaHesaplari.Select(b => new BankaHesabi
-                {
-                    HesapId = b.HesapId,
-                    HesapAdi = b.HesapAdi,
-                    UserId = userId
-                }).ToList();
-
-                user.Cariler = cariKartlar.Select(c => new Cari
-                {
-                    CariId = c.CariId,
-                    CariAdi = c.CariAdi,
-                    UserId = userId
-                }).ToList();
-
-                user.SonGuncellenmeTarihi = DateTime.UtcNow;
-
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException ex)
-            {
-                _logger.LogError(ex, "Veri güncellenirken veritabanı hatası oluştu");
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Veri güncellenirken beklenmeyen bir hata oluştu");
-                throw;
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             }
             finally
             {
@@ -828,7 +835,7 @@ namespace DiaFisTransferEntegrasyonu.Services
                     _key_ote_rezervasyonkarti_misafir = 0,
                     _key_prj_proje = 0,
                     _key_scf_banka_odeme_plani = 0,
-                    _key_sis_ust_islem_turu = 564595,
+                    _key_sis_ust_islem_turu = user.UstIslemTuru ?? 0,
                     _key_scf_carikart = new { _key = cariIdInt.ToString() },
                     _key_scf_kasa = new { _key = kasaIdInt.ToString() },
                     _key_scf_kasavirman = 0,
@@ -837,7 +844,8 @@ namespace DiaFisTransferEntegrasyonu.Services
                     _key_scf_satiselemani = 0,
                     _key_sis_doviz = new { adi = doviz },
                     _key_sis_doviz_cari = new { adi = doviz },
-                    _key_sis_sube = new { subekodu = user.SubeKodu.ToString() },
+                    //_key_sis_sube = new { subekodu = user.SubeKodu.ToString() },
+                    _key_sis_sube = Convert.ToInt32(user.SubeKodu),
                     aciklama = aciklama,
                     aciklama2 = "",
                     aciklama3 = "",
@@ -987,8 +995,8 @@ namespace DiaFisTransferEntegrasyonu.Services
                     _key_scf_odeme_plani = 0,
                     _key_sis_ozelkod = 0,
                     _key_sis_seviyekodu = 0,
-                    _key_sis_ust_islem_turu = 564595,
-                    _key_sis_sube = new { subekodu = user.SubeKodu.ToString() },
+                    _key_sis_ust_islem_turu = user.UstIslemTuru ?? 0,
+                    _key_sis_sube = Convert.ToInt32(user.SubeKodu),
                     aciklama1 = "KREDİ KARTI",
                     aciklama2 = "",
                     aciklama3 = "",
@@ -1159,6 +1167,7 @@ namespace DiaFisTransferEntegrasyonu.Services
                             _key_ote_rezervasyonkarti = 0,
                             _key_scf_carikart = new { _key = k._key_scf_carikart.ToString() },
                             _key_prj_proje = 0,
+                            _key_sis_sube = Convert.ToInt32(user.SubeKodu),
                             _key_scf_banka_odeme_plani = 0,
                             _key_scf_odeme_plani = 0,
                             _key_scf_satiselemani = 0,
@@ -1186,8 +1195,8 @@ namespace DiaFisTransferEntegrasyonu.Services
                         _key_scf_odeme_plani = 0,
                         _key_sis_ozelkod = 0,
                         _key_sis_seviyekodu = 0,
-                        _key_sis_ust_islem_turu = user.UstIslemTuru.Value,
-                        _key_sis_sube = new { subekodu = user.SubeKodu.ToString() },
+                        _key_sis_ust_islem_turu = user.UstIslemTuru ?? 0,
+                        
                         aciklama1 = model.Aciklama1,
                         aciklama2 = model.Aciklama2,
                         aciklama3 = model.Aciklama3,
@@ -1207,7 +1216,7 @@ namespace DiaFisTransferEntegrasyonu.Services
                         _key_scf_odeme_plani = 0,
                         _key_sis_ozelkod = 0,
                         _key_sis_seviyekodu = 0,
-                        _key_sis_sube = new { subekodu = user.SubeKodu.ToString() },
+                        _key_sis_sube = Convert.ToInt32(user.SubeKodu),
                         aciklama1 = model.Aciklama1,
                         aciklama2 = model.Aciklama2,
                         aciklama3 = model.Aciklama3,
@@ -1283,8 +1292,8 @@ namespace DiaFisTransferEntegrasyonu.Services
                 {
                     _key_sis_ozelkod = 0,
                     _key_sis_seviyekodu = 0,
-                    _key_sis_ust_islem_turu = 564595,
-                    _key_sis_sube_source = new { subekodu = user.SubeKodu.ToString() },
+                    _key_sis_ust_islem_turu = user.UstIslemTuru ?? 0,
+                    _key_sis_sube_source = Convert.ToInt32(user.SubeKodu),
                     aciklama1 = "GELEN HAVALE",
                     aciklama2 = "",
                     aciklama3 = "",

@@ -19,10 +19,15 @@ namespace DiaFisTransferEntegrasyonu.Controllers
         private readonly IDiaService _diaService;
         private readonly ApplicationDbContext _context;
         private readonly IDovizKuruService _dovizKuruService;
+        private readonly ICacheService _cacheService;
 
-        public TransferController(IDiaService diaService, ApplicationDbContext context, IDovizKuruService dovizKuruService)
+        public TransferController(IDiaService diaService,
+            ApplicationDbContext context,
+            IDovizKuruService dovizKuruService,
+            ICacheService cacheService)
         {
             _diaService = diaService;
+            _cacheService = cacheService;
             _context = context;
             _dovizKuruService = dovizKuruService;
         }
@@ -41,41 +46,58 @@ namespace DiaFisTransferEntegrasyonu.Controllers
             return Json(dovizKurlari);
         }
 
-        // GET: /Transfer/Index
         public async Task<IActionResult> Index()
         {
-            int userId = await GetCurrentUserIdAsync();
-
-            if (userId == 0)
+            try
             {
-                // User is not logged in or session has expired
-                return RedirectToAction("Login", "Account");
+                int userId = await GetCurrentUserIdAsync();
+
+                if (userId == 0)
+                {
+                    return RedirectToAction("Login", "Account");
+                }
+
+                var user = await _context.Users
+                    .Include(u => u.KasaKartlari)
+                    .Include(u => u.OdemePlanlari)
+                    .Include(u => u.BankaHesaplari)
+                    .FirstOrDefaultAsync(u => u.Id == userId);
+
+                if (user == null)
+                    return NotFound();
+
+                var model = new TransferViewModel
+                {
+                    KasaKartlari = user.KasaKartlari.ToList(),
+                    OdemePlanlari = user.OdemePlanlari.ToList(),
+                    BankaHesaplari = user.BankaHesaplari.ToList()
+                };
+
+                try
+                {
+                    // Döviz kurlarını almayı dene, hata olursa boş liste kullan
+                    model.DovizKurlari = await _dovizKuruService.GetDovizKurlariAsync(
+                        user.ApiKey,
+                        user.ApiUrl,
+                        user.FirmaKodu,
+                        user.DonemKodu) ?? new List<DovizKuru>();
+                }
+                catch (Exception ex)
+                {
+                    // Hata durumunda boş liste kullan ve hatayı logla
+                    model.DovizKurlari = new List<DovizKuru>();
+                    // Opsiyonel: Hatayı TempData'ya ekle
+                    TempData["Error"] = "Döviz kurları yüklenirken bir hata oluştu: " + ex.Message;
+                }
+
+                return View(model);
             }
-
-            var user = await _context.Users
-                .Include(u => u.KasaKartlari)
-                .Include(u => u.OdemePlanlari)
-                .Include(u => u.BankaHesaplari)
-                .Include(u => u.Cariler)
-                .FirstOrDefaultAsync(u => u.Id == userId);
-
-            if (user == null)
-                return NotFound();
-
-            // Döviz kurlarını al
-            var dovizKurlari = await _dovizKuruService.GetDovizKurlariAsync(user.ApiKey, user.ApiUrl, user.FirmaKodu, user.DonemKodu);
-
-            // Create a ViewModel to pass the data to the View
-            var model = new TransferViewModel
+            catch (Exception ex)
             {
-                KasaKartlari = user.KasaKartlari.ToList(),
-                OdemePlanlari = user.OdemePlanlari.ToList(),
-                BankaHesaplari = user.BankaHesaplari.ToList(),
-                Cariler = user.Cariler.ToList(),
-                DovizKurlari = dovizKurlari
-            };
-
-            return View(model);
+                // Genel hata durumunda
+                TempData["Error"] = "Bir hata oluştu: " + ex.Message;
+                return RedirectToAction("Error", "Home");
+            }
         }
 
         [HttpPost]
@@ -101,31 +123,41 @@ namespace DiaFisTransferEntegrasyonu.Controllers
             catch (Exception ex)
             {
                 // You may log the error here
-                return Json(new { success = false, message = "Bir hata oluştu. Lütfen tekrar deneyin." });
+                return Json(new { success = false, message = ex.Message });
             }
         }
 
-        // GET: /Transfer/SearchCariler
         [HttpGet]
         public async Task<IActionResult> SearchCariler(string term)
         {
             int userId = await GetCurrentUserIdAsync();
+            if (userId == 0) return Unauthorized();
 
-            if (userId == 0)
-            {
-                return Unauthorized(); // Or handle as appropriate
-            }
+            var cariler = await _cacheService.GetCarilerAsync(userId);
 
-            // Term'i büyük harfe çeviriyoruz
-            string upperTerm = term.ToUpper();
-
-            var cariler = await _context.Cariler
-                .Where(c => c.UserId == userId && c.CariAdi.ToUpper().Contains(upperTerm))
+            // Cache'den gelen sonuçları filtrele
+            var filteredCariler = cariler
+                .Where(c => c.CariAdi.ToUpper().Contains(term.ToUpper()))
                 .Select(c => new { id = c.CariId, label = c.CariAdi, value = c.CariAdi })
                 .Take(10)
-                .ToListAsync();
+                .ToList();
 
-            return Json(cariler);
+            // Eğer cache yükleniyorsa veya boşsa DB'den sorgula
+            if (!filteredCariler.Any())
+            {
+                using (var command = _context.Database.GetDbConnection().CreateCommand())
+                {
+                    command.CommandTimeout = 180;
+
+                    filteredCariler = await _context.Cariler
+                        .Where(c => c.UserId == userId && c.CariAdi.ToUpper().Contains(term.ToUpper()))
+                        .Select(c => new { id = c.CariId, label = c.CariAdi, value = c.CariAdi })
+                        .Take(10)
+                        .ToListAsync();
+                }
+            }
+
+            return Json(filteredCariler);
         }
 
         // You can add similar actions for other searches if needed
@@ -139,32 +171,27 @@ namespace DiaFisTransferEntegrasyonu.Controllers
 
             if (userId == 0)
             {
-                return Unauthorized(); // Or handle as appropriate
+                return Unauthorized();
             }
 
             if (ModelState.IsValid)
             {
-                // Process the form data
-                // For example, save to database or call an external service
-
-                // Redirect to a confirmation page or back to the Index
                 return RedirectToAction("Index");
             }
 
-            // If the model state is invalid, reload the data and return the view with validation errors
+            // If the model state is invalid, reload only necessary data
             var user = await _context.Users
                 .Include(u => u.KasaKartlari)
                 .Include(u => u.OdemePlanlari)
                 .Include(u => u.BankaHesaplari)
-                .Include(u => u.Cariler)
                 .FirstOrDefaultAsync(u => u.Id == userId);
 
             var viewModel = new TransferViewModel
             {
                 KasaKartlari = user.KasaKartlari.ToList(),
                 OdemePlanlari = user.OdemePlanlari.ToList(),
-                BankaHesaplari = user.BankaHesaplari.ToList(),
-                Cariler = user.Cariler.ToList()
+                BankaHesaplari = user.BankaHesaplari.ToList()
+                // Cariler property'si burada da boş bırakıldı
             };
 
             return View("Index", viewModel);

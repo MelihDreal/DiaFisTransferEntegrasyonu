@@ -8,6 +8,8 @@ using System.Text.Json;
 using System.Text.Unicode;
 using Microsoft.Extensions.Configuration.Json;
 using System.Text.Encodings.Web;
+using Hangfire;
+using Hangfire.MemoryStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,11 +20,29 @@ builder.Services.AddHttpContextAccessor(); // Yeni eklenen satır
 builder.Services.AddScoped<IDovizKuruService, DovizKuruService>();
 builder.Services.AddScoped<IDiaService, DiaService>();
 
+builder.Services.AddHttpContextAccessor();
 
-// PostgreSQL için DbContext yapılandırması
+builder.Services.AddDistributedMemoryCache(); // Veya Redis için: services.AddStackExchangeRedisCache()
+builder.Services.AddScoped<ICacheService, CacheService>();
+builder.Services.AddHangfire(config => config.UseMemoryStorage()); // Veya SQL Server/Redis
+builder.Services.AddHangfireServer();
+
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsqlOptions =>
+        {
+            npgsqlOptions.CommandTimeout(180); // 3 dakika timeout
+            npgsqlOptions.EnableRetryOnFailure(3); // 3 kez yeniden deneme
+        }
+    )
+);
 
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.CheckConsentNeeded = context => true;
+    options.MinimumSameSitePolicy = SameSiteMode.Strict;
+});
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
        .AddCookie(options =>

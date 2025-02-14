@@ -54,28 +54,29 @@ public class DovizKuruService : IDovizKuruService
     {
         try
         {
-            var diaInfoJson = _httpContextAccessor.HttpContext.Request.Cookies["DiaInfo"];
+            var diaInfoJson = _httpContextAccessor.HttpContext?.Request.Cookies["DiaInfo"];
+
             if (string.IsNullOrEmpty(diaInfoJson))
             {
-                throw new Exception("Dia bilgileri bulunamadı.");
+                _logger.LogWarning("DiaInfo cookie'si bulunamadı");
+                throw new Exception("Dia bilgileri bulunamadı. Lütfen tekrar giriş yapın.");
             }
 
-            var settings = new JsonSerializerSettings
-            {
-                NullValueHandling = NullValueHandling.Ignore,
-                DateFormatHandling = DateFormatHandling.IsoDateFormat
-            };
+            _logger.LogDebug("DiaInfo cookie içeriği: {DiaInfoJson}", diaInfoJson);
 
-            return JsonConvert.DeserializeObject<DiaInfo>(diaInfoJson, settings);
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Cari kartlar parse edilirken JSON hatası oluştu");
-            throw;
+            var diaInfo = JsonConvert.DeserializeObject<DiaInfo>(diaInfoJson);
+
+            if (diaInfo == null)
+            {
+                _logger.LogError("DiaInfo deserialize edilemedi");
+                throw new Exception("Dia bilgileri geçersiz format.");
+            }
+
+            return diaInfo;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "GetDiaInfo metodunda hata oluştu");
+            _logger.LogError(ex, "GetDiaInfo metodunda hata");
             throw;
         }
     }

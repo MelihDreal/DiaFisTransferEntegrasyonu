@@ -99,5 +99,52 @@
 @section Scripts {
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
+
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <script>
+            $(document).ready(function () {
+                // Form submit edildiğinde
+                $('form').on('submit', function () {
+                    Swal.fire({
+                        title: 'Veriler Yükleniyor',
+                        html: 'DIA tarafından veriler yükleniyor, lütfen bekleyiniz...',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                });
+
+                // Eğer loading mesajı varsa göster
+            @if (TempData["LoadingMessage"] != null)
+            {
+                <text>
+                        Swal.fire({
+                            title: 'Veriler Yükleniyor',
+                            html: '@TempData["LoadingMessage"]',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+                </text>
+            }
+
+                    // Eğer hata mesajı varsa göster
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <text>
+                        Swal.fire({
+                            title: 'Hata!',
+                            text: '@Html.ValidationSummary()',
+                            icon: 'error',
+                            confirmButtonText: 'Tamam'
+                        });
+                </text>
+            }
+                    });
+        </script>
     }
 }

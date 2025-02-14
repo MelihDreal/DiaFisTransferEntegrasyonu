@@ -3,7 +3,6 @@
     ViewData["Title"] = "Dia Fiş Aktarım";
 }
 
-<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
 <style>
     .button-container .btn {
         height: 60px;
@@ -11,6 +10,25 @@
         justify-content: center;
         align-items: center;
     }
+
+    .ui-autocomplete {
+        max-height: 200px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        z-index: 9999 !important;
+        background-color: white;
+        border: 1px solid #ddd;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .ui-menu-item {
+        padding: 5px 10px;
+        cursor: pointer;
+    }
+
+        .ui-menu-item:hover {
+            background-color: #f0f0f0;
+        }
 
     .form-header {
         border-radius: 0.25rem 0.25rem 0rem 0rem;
@@ -32,7 +50,7 @@
         width: 70%;
         min-width: 600px;
     }
-    /* Yeni eklenen stiller */
+
     .currency-rates {
         position: fixed;
         top: 10px;
@@ -42,12 +60,23 @@
         padding: 10px;
         border-radius: 5px;
         font-weight: bold;
+        z-index: 1000;
     }
 
         .currency-rates span {
             margin-right: 10px;
         }
 </style>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @TempData["Error"]
+        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+}
 
 <!-- Döviz kurları için yeni div -->
 <div class="currency-rates">
@@ -327,179 +356,239 @@
 
 </div>
 
-<!-- jQuery ve Diğer Scriptler -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
-<!-- SweetAlert için Script -->
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+@section Scripts {
+    <script>
+        $(document).ready(function () {
 
-<script>
-    $(document).ready(function () {
-        // Formları Göster/Gizle Fonksiyonu
-        function toggleForm(formId) {
-            $('[id^="form"]').hide();
-            $('#' + formId).show();
-        }
+            // SweetAlert mesajlarını göster
+            var message = @Html.Raw(Json.Serialize(TempData["SweetAlertMessage"]));
+            var alertType = @Html.Raw(Json.Serialize(TempData["SweetAlertType"]));
 
-        // Form Seçim Butonlarına Tıklandığında Formları Değiştir
-        $('.button-container .btn').click(function () {
-            const formId = $(this).attr('onclick').match(/'([^']+)'/)[1];
-            toggleForm(formId);
-        });
+            if (message) {
+                // Eğer mesaj JSON string ise parse et
+                try {
+                    message = JSON.parse(message);
+                } catch (e) {
+                    // Parse edilemezse olduğu gibi kullan
+                    console.log("Message parsing error:", e);
+                }
 
-        // Güncelleme Butonu (AJAX ile Bilgileri Güncelle)
-        $('#updateButton').click(function () {
-            fetch('/Transfer/UpdateInfo', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            })
-                .then(response => response.json())
-                .then(data => {
-                    Swal.fire({
-                        title: data.success ? 'Başarılı!' : 'Hata!',
-                        text: data.success ? 'Bilgiler başarıyla güncellendi.' : 'Bilgiler güncellenirken bir hata oluştu.',
-                        icon: data.success ? 'success' : 'error',
-                        confirmButtonText: 'Tamam'
-                    });
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    Swal.fire({
-                        title: 'Hata!',
-                        text: 'Bir hata oluştu. Lütfen tekrar deneyin.',
-                        icon: 'error',
-                        confirmButtonText: 'Tamam'
-                    });
+                Swal.fire({
+                    title: alertType === 'success' ? 'Başarılı!' : 'Hata!',
+                    text: message,
+                    icon: alertType || 'info',
+                    confirmButtonText: 'Tamam'
                 });
-        });
+            }
 
-        // Autocomplete Ayarlama Fonksiyonu
-        function setupAutocomplete(cariAdiSelector, cariIdSelector) {
-            $(cariAdiSelector).autocomplete({
-                source: function (request, response) {
-                    $.ajax({
-                        url: '@Url.Action("SearchCariler", "Transfer")',
-                        dataType: "json",
-                        data: { term: request.term },
-                        success: function (data) { response(data); },
-                        error: function (xhr, status, error) { console.error(xhr.responseText); }
-                    });
-                },
-                minLength: 2,
-                select: function (event, ui) {
-                    $(cariAdiSelector).val(ui.item.label);
-                    $(cariIdSelector).val(ui.item.id);
-                    console.log(`${cariIdSelector} set edildi: ${ui.item.id}`); // Log
-                    return false;
-                }
-            });
-        }
+            // Form toggle fonksiyonu
+            window.toggleForm = function (formId) {
+                $('[id^="form"]').hide();
+                $('#' + formId).show();
+            };
 
-        // Tüm Cari Adı Alanları İçin Autocomplete Ayarlama
-        setupAutocomplete('#cariAdi1', '#cariId1');
-        setupAutocomplete('#cariAdi2', '#cariId2');
-        setupAutocomplete('#alacakCariAdi3', '#alacakCariId3');
-        setupAutocomplete('#borcCariAdi3', '#borcCariId3');
-        setupAutocomplete('#cariAdi4', '#cariId4');
-
-        // Bugünün Tarihini Tüm Tarih Alanlarına Atama
-        var today = new Date().toISOString().split('T')[0];
-        $('input[type="date"]').each(function () {
-            $(this).val(today);
-        });
-
-        // Form2: Ödeme Planı Değiştiğinde PlanHesapKey'i Güncelle
-        $('#paymentPlan2').change(function () {
-            $('#PlanHesapKey2').val($(this).find('option:selected').data('planhesapkey'));
-        });
-
-       
-        // SweetAlert Mesajları (Sunucudan Gelen Mesajlar)
-        var encodedMessage = '@Html.Raw(TempData["SweetAlertMessage"])';
-        var type = '@TempData["SweetAlertType"]';
-
-        if (encodedMessage) {
-            var message = JSON.parse(encodedMessage);
-            Swal.fire({
-                title: type === 'success' ? 'Başarılı!' : 'Hata!',
-                text: message,
-                icon: type,
-                confirmButtonText: 'Tamam'
-            });
-        }
-
-        // Form4: Banka Hesabı Seçimi ve Banka Hesap ID Güncelleme
-        $('#bankaHesapAdi4').change(function () {
-            var selectedHesapId = $(this).val();
-            $('#bankaHesapId4').val(selectedHesapId);
-            console.log("Banka Hesap ID güncellendi: " + selectedHesapId); // Log
-        });
-
-        // Form3: Alacak Tutarını Borç Tutarına Senkronize Etme
-        $('#alacakTutar3').on('input', function () {
-            $('#borcTutar3').val($(this).val());
-        });
-
-        // Alacak Döviz seçimi değiştiğinde Borç Döviz'i güncelle
-        $('#alacakDoviz3').change(function () {
-            $('#borcDoviz3').val($(this).val()).selectpicker('refresh');
-        });
-
-        // Enter Tuşunu Tab Tuşu Gibi Çalıştırma Fonksiyonu
-        function setupEnterAsTab(formId) {
-            $('#' + formId + ' input, #' + formId + ' select, #' + formId + ' textarea').on('keydown', function (e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault(); // Formun submit edilmesini engeller
-
-                    // Tüm odaklanabilir elementleri seçer
-                    var focusableElements = $('#' + formId).find('input, select, textarea, button').filter(':visible');
-
-                    // Şu anki elementin indeksini bulur
-                    var currentIndex = focusableElements.index(this);
-
-                    // Bir sonraki odaklanabilir elemana odaklanır
-                    if (currentIndex > -1 && currentIndex < focusableElements.length - 1) {
-                        focusableElements.eq(currentIndex + 1).focus();
+            // Autocomplete kurulumu
+            function setupAutocomplete(cariAdiSelector, cariIdSelector) {
+                $(cariAdiSelector).autocomplete({
+                    source: function (request, response) {
+                        $.ajax({
+                            url: '/Transfer/SearchCariler',
+                            type: 'GET',
+                            dataType: "json",
+                            data: { term: request.term },
+                            success: function (data) {
+                                console.log('Arama sonuçları:', data);
+                                response($.map(data, function (item) {
+                                    return {
+                                        label: item.label,
+                                        value: item.label,
+                                        id: item.id
+                                    };
+                                }));
+                            },
+                            error: function (xhr, status, error) {
+                                console.error('Arama hatası:', error);
+                            }
+                        });
+                    },
+                    minLength: 2,
+                    select: function (event, ui) {
+                        $(this).val(ui.item.label);
+                        $(cariIdSelector).val(ui.item.id);
+                        return false;
                     }
-                }
-            });
-        }
-
-        // Tüm Formlar İçin Enter'u Tab Gibi Çalıştırma
-        setupEnterAsTab('form1');
-        setupEnterAsTab('form2');
-        setupEnterAsTab('form3');
-        setupEnterAsTab('form4');
-
-    });
-
-    function updateDovizKurlari() {
-        $.ajax({
-            url: '@Url.Action("GetDovizKurlari", "Transfer")',
-            type: 'GET',
-            success: function (result) {
-                var kurlar = {
-                    'EUR': '€',
-                    'USD': '$',
-                    'GBP': '£'
+                }).autocomplete("instance")._renderItem = function (ul, item) {
+                    return $("<li>")
+                        .append("<div>" + item.label + "</div>")
+                        .appendTo(ul);
                 };
+            }
 
-                result.forEach(function (kur) {
-                    if (kur.dovizKodu in kurlar) {
-                        $(`#${kur.dovizKodu.toLowerCase()}-rate`).text(kur.kur.toFixed(2));
+            // Tüm cari inputları için autocomplete'i ayarla
+            setupAutocomplete('#cariAdi1', '#cariId1');
+            setupAutocomplete('#cariAdi2', '#cariId2');
+            setupAutocomplete('#alacakCariAdi3', '#alacakCariId3');
+            setupAutocomplete('#borcCariAdi3', '#borcCariId3');
+            setupAutocomplete('#cariAdi4', '#cariId4');
+
+            // Güncelleme butonu işlemleri
+            $('#updateButton').click(function () {
+                Swal.fire({
+                    title: 'Güncelleniyor...',
+                    html: 'Bilgiler güncelleniyor, lütfen bekleyiniz...',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                fetch('/Transfer/UpdateInfo', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        Swal.fire({
+                            title: data.success ? 'Başarılı!' : 'Hata!',
+                            text: data.message || (data.success ? 'Bilgiler başarıyla güncellendi.' : 'Bilgiler güncellenirken bir hata oluştu.'),
+                            icon: data.success ? 'success' : 'error',
+                            confirmButtonText: 'Tamam'
+                        });
+                        if (data.success) {
+                            updateDovizKurlari();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        Swal.fire({
+                            title: 'Hata!',
+                            text: 'Bir hata oluştu. Lütfen tekrar deneyin.',
+                            icon: 'error',
+                            confirmButtonText: 'Tamam'
+                        });
+                    });
+            });
+
+            // Bugünün tarihini tüm tarih alanlarına ata
+            var today = new Date().toISOString().split('T')[0];
+            $('input[type="date"]').val(today);
+
+            // Form2: Ödeme Planı değişikliği
+            $('#paymentPlan2').change(function () {
+                var selectedOption = $(this).find('option:selected');
+                $('#PlanHesapKey2').val(selectedOption.data('planhesapkey'));
+            });
+
+            // Form3: Tutar senkronizasyonu
+            $('#alacakTutar3').on('input', function () {
+                $('#borcTutar3').val($(this).val());
+            });
+
+            // Form3: Döviz senkronizasyonu
+            $('#alacakDoviz3').change(function () {
+                $('#borcDoviz3').val($(this).val());
+            });
+
+            // Form4: Banka hesabı seçimi
+            $('#bankaHesapAdi4').change(function () {
+                var selectedHesapId = $(this).val();
+                $('#bankaHesapId4').val(selectedHesapId);
+            });
+
+            // Enter tuşunu tab gibi çalıştır
+            function setupEnterAsTab(formId) {
+                $('#' + formId + ' input, #' + formId + ' select').on('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        var focusables = $('#' + formId).find('input, select').not(':disabled, [readonly]');
+                        var currentIndex = focusables.index(this);
+                        var nextElement = focusables.eq(currentIndex + 1);
+                        if (nextElement.length) {
+                            nextElement.focus();
+                        }
                     }
                 });
             }
+
+            // Tüm formlarda enter tuşunu aktifleştir
+            ['form1', 'form2', 'form3', 'form4'].forEach(setupEnterAsTab);
+
+            // Form validasyonları
+            $('form').on('submit', function (e) {
+                var requiredFields = $(this).find('[required]');
+                var isValid = true;
+
+                requiredFields.each(function () {
+                    if (!$(this).val()) {
+                        isValid = false;
+                        $(this).addClass('is-invalid');
+                    } else {
+                        $(this).removeClass('is-invalid');
+                    }
+                });
+
+                if (!isValid) {
+                    e.preventDefault();
+                    Swal.fire({
+                        title: 'Hata!',
+                        text: 'Lütfen tüm zorunlu alanları doldurun.',
+                        icon: 'error',
+                        confirmButtonText: 'Tamam'
+                    });
+                }
+            });
+
+            // SweetAlert mesajlarını göster
+            var message = '@TempData["Message"]';
+            var messageType = '@TempData["MessageType"]';
+            if (message) {
+                Swal.fire({
+                    title: messageType === 'success' ? 'Başarılı!' : 'Hata!',
+                    text: message,
+                    icon: messageType || 'info',
+                    confirmButtonText: 'Tamam'
+                });
+            }
+
+            // İlk yükleme ve periyodik döviz kuru güncellemesi
+            updateDovizKurlari();
+            setInterval(updateDovizKurlari, 5 * 60 * 1000); // 5 dakikada bir güncelle
         });
-    }
 
-    // Sayfa yüklendiğinde döviz kurlarını güncelle
-    $(document).ready(function () {
-        updateDovizKurlari();
-    });
+        // Döviz kurlarını güncelle
+        function updateDovizKurlari() {
+            $.ajax({
+                url: '/Transfer/GetDovizKurlari',
+                type: 'GET',
+                success: function (result) {
+                    if (Array.isArray(result)) {
+                        result.forEach(function (kur) {
+                            if (kur.dovizKodu) {
+                                $(`#${kur.dovizKodu.toLowerCase()}-rate`).text(
+                                    Number(kur.kur).toFixed(2)
+                                );
+                            }
+                        });
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error('Döviz kurları güncellenirken hata oluştu:', error);
+                }
+            });
+        }
 
-    // Her 5 dakikada bir döviz kurlarını güncelle
-    setInterval(updateDovizKurlari, 5 * 60 * 1000);
-</script>
+        // Input validation helpers
+        $('input[type="number"]').on('input', function () {
+            this.value = this.value.replace(/[^0-9.,]/g, '');
+        });
+
+        // Numeric input format
+        $('input[type="number"]').on('blur', function () {
+            if (this.value) {
+                this.value = Number(this.value.replace(',', '.')).toFixed(2);
+            }
+        });
+    </script>
+}

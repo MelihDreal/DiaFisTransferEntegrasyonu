@@ -33,6 +33,9 @@ namespace DiaFisTransferEntegrasyonu.Models
 
         public bool IsAdmin { get; set; } = false; // Default değer false olarak ayarlandı
 
+        public string? LoginUsername { get; set; }
+        public string? LoginPassword { get; set; }
+
         public DateTime SonGuncellenmeTarihi { get; set; } = DateTime.UtcNow; // Varsayılan olarak şu anki zaman
 
         // İlişkiler
